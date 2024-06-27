@@ -28,22 +28,38 @@ jobs:
       - name: Create S3 bucket
         run: |
           aws s3 mb s3://${{ env.S3_BUCKET_NAME }} --region ${{ env.AWS_REGION }}
-      
-      - name: Create EC2 instance
+
+      - name: Check for existing EC2 instance
+        id: check_instance
+        run: |
+          INSTANCE_ID=$(aws ec2 describe-instances --filters "Name=tag:Name,Values=myvm" "Name=instance-state-name,Values=running" --query "Reservations[*].Instances[*].InstanceId" --output text)
+          if [ -z "$INSTANCE_ID" ]; then
+            echo "Instance does not exist."
+            echo "INSTANCE_EXISTS=false" >> $GITHUB_ENV
+          else
+            echo "Instance exists."
+            echo "INSTANCE_ID=$INSTANCE_ID" >> $GITHUB_ENV
+            echo "INSTANCE_EXISTS=true" >> $GITHUB_ENV
+          fi
+
+      - name: Create EC2 instance if not exists
+        if: env.INSTANCE_EXISTS == 'false'
         id: create_instance
         run: |
-          INSTANCE_ID=$(aws ec2 run-instances --image-id ${{ env.EC2_AMI_ID }} --count 1 --instance-type ${{ env.EC2_INSTANCE_TYPE }} --key-name ${{ env.EC2_KEY_NAME }} --query 'Instances[0].InstanceId' --output text)
-          echo "::set-output name=instance_id::${INSTANCE_ID}"
+          INSTANCE_ID=$(aws ec2 run-instances --image-id ${{ env.EC2_AMI_ID }} --count 1 --instance-type ${{ env.EC2_INSTANCE_TYPE }} --key-name ${{ env.EC2_KEY_NAME }} --tag-specifications 'ResourceType=instance,Tags=[{Key=Name,Value=myvm}]' --query 'Instances[0].InstanceId' --output text)
+          echo "Created instance ID: $INSTANCE_ID"
+          echo "INSTANCE_ID=$INSTANCE_ID" >> $GITHUB_ENV
 
       - name: Wait for EC2 instance to be in running state
         run: |
-          aws ec2 wait instance-running --instance-ids ${{ steps.create_instance.outputs.instance_id }}
+          aws ec2 wait instance-running --instance-ids ${{ env.INSTANCE_ID }}
 
       - name: Get EC2 instance public IP
         id: get_ip
         run: |
-          IP=$(aws ec2 describe-instances --instance-ids ${{ steps.create_instance.outputs.instance_id }} --query 'Reservations[0].Instances[0].PublicIpAddress' --output text)
-          echo "::set-output name=ip::${IP}"
+          PUBLIC_IP=$(aws ec2 describe-instances --instance-id ${{ env.INSTANCE_ID }} --query 'Reservations[0].Instances[0].PublicIpAddress' --output text)
+          echo "Public IP: $PUBLIC_IP"
+          echo "PUBLIC_IP=$PUBLIC_IP" >> $GITHUB_ENV
 
   deploy-app:
     name: Deploy Application
@@ -60,10 +76,16 @@ jobs:
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: ${{ env.AWS_REGION }}
 
+      - name: Set up SSH
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.myvm_sshkey }}" > ~/.ssh/myvm
+          chmod 400 ~/.ssh/myvm
+
       - name: Deploy Python App
         run: |
-          scp -o StrictHostKeyChecking=no -i ~/.ssh/${{ env.EC2_KEY_NAME }} hello_world.py ec2-user@${{ needs.create-resources.outputs.get_ip.ip }}:/home/ec2-user/
-          ssh -o StrictHostKeyChecking=no -i ~/.ssh/${{ env.EC2_KEY_NAME }} ec2-user@${{ needs.create-resources.outputs.get_ip.ip }} 'python3 /home/ec2-user/hello_world.py'
+          scp -o StrictHostKeyChecking=no -i ~/.ssh/myvm hello_world.py ec2-user@${{ env.PUBLIC_IP }}:/home/ec2-user/
+          ssh -o StrictHostKeyChecking=no -i ~/.ssh/myvm ec2-user@${{ env.PUBLIC_IP }} 'python3 /home/ec2-user/hello_world.py'
 
   test-deployment:
     name: Test Deployment
@@ -72,4 +94,4 @@ jobs:
     steps:
       - name: Verify Deployment
         run: |
-          ssh -o StrictHostKeyChecking=no -i ~/.ssh/${{ env.EC2_KEY_NAME }} ec2-user@${{ needs.create-resources.outputs.get_ip.ip }} 'curl localhost:8000'
+          ssh -o StrictHostKeyChecking=no -i ~/.ssh/myvm ec2-user@${{ env.PUBLIC_IP }} 'curl localhost:8000'
