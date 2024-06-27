@@ -8,7 +8,7 @@ env:
   EC2_INSTANCE_TYPE: t2.micro
   EC2_AMI_ID: ami-09040d770ffe2224f # Update with your preferred AMI ID
   EC2_KEY_NAME: adithi # Update with your key pair name
-  S3_BUCKET_NAME: sucessbucket  # Unique S3 bucket name
+  S3_BUCKET_NAME: sucessbucket123  # Unique S3 bucket name
 
 jobs:
   create-resources:
