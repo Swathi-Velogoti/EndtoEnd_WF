@@ -1,0 +1,75 @@
+name: AWS Deployment Pipeline
+
+on:
+  workflow_dispatch:
+
+env:
+  AWS_REGION: us-east-2
+  EC2_INSTANCE_TYPE: t2.micro
+  EC2_AMI_ID: ami-09040d770ffe2224f # Update with your preferred AMI ID
+  EC2_KEY_NAME: adithi # Update with your key pair name
+  S3_BUCKET_NAME: endtoend_app_bucket  # Unique S3 bucket name
+
+jobs:
+  create-resources:
+    name: Create AWS Resources
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v2
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v2
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Create S3 bucket
+        run: |
+          aws s3 mb s3://${{ env.S3_BUCKET_NAME }} --region ${{ env.AWS_REGION }}
+      
+      - name: Create EC2 instance
+        id: create_instance
+        run: |
+          INSTANCE_ID=$(aws ec2 run-instances --image-id ${{ env.EC2_AMI_ID }} --count 1 --instance-type ${{ env.EC2_INSTANCE_TYPE }} --key-name ${{ env.EC2_KEY_NAME }} --query 'Instances[0].InstanceId' --output text)
+          echo "::set-output name=instance_id::${INSTANCE_ID}"
+
+      - name: Wait for EC2 instance to be in running state
+        run: |
+          aws ec2 wait instance-running --instance-ids ${{ steps.create_instance.outputs.instance_id }}
+
+      - name: Get EC2 instance public IP
+        id: get_ip
+        run: |
+          IP=$(aws ec2 describe-instances --instance-ids ${{ steps.create_instance.outputs.instance_id }} --query 'Reservations[0].Instances[0].PublicIpAddress' --output text)
+          echo "::set-output name=ip::${IP}"
+
+  deploy-app:
+    name: Deploy Application
+    runs-on: ubuntu-latest
+    needs: create-resources
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v2
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v2
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Deploy Python App
+        run: |
+          scp -o StrictHostKeyChecking=no -i ~/.ssh/${{ env.EC2_KEY_NAME }} hello_world.py ec2-user@${{ needs.create-resources.outputs.get_ip.ip }}:/home/ec2-user/
+          ssh -o StrictHostKeyChecking=no -i ~/.ssh/${{ env.EC2_KEY_NAME }} ec2-user@${{ needs.create-resources.outputs.get_ip.ip }} 'python3 /home/ec2-user/hello_world.py'
+
+  test-deployment:
+    name: Test Deployment
+    runs-on: ubuntu-latest
+    needs: deploy-app
+    steps:
+      - name: Verify Deployment
+        run: |
+          ssh -o StrictHostKeyChecking=no -i ~/.ssh/${{ env.EC2_KEY_NAME }} ec2-user@${{ needs.create-resources.outputs.get_ip.ip }} 'curl localhost:8000'
