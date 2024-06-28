@@ -118,9 +118,8 @@ jobs:
 
       - name: Deploy Python App
         run: |
-          scp -o StrictHostKeyChecking=no -i ~/.ssh/myvm hello_world.py ubuntu@${{ needs.create-resources.outputs.public_ip }}:/home/ubuntu/
-          ssh -o StrictHostKeyChecking=no -i ~/.ssh/myvm ubuntu@${{ needs.create-resources.outputs.public_ip }} 'python3 /home/ubuntu/hello_world.py'
-
+          scp -o StrictHostKeyChecking=no -i ~/.ssh/myvm.pem hello_world.py ubuntu@${{ needs.create-resources.outputs.get_ip.ip }}:/home/ubuntu/
+          ssh -o StrictHostKeyChecking=no -i ~/.ssh/myvm.pem ubuntu@${{ needs.create-resources.outputs.get_ip.ip }} 'nohup python3 /home/ubuntu/hello_world.py &'
   test-deployment:
     name: Test Deployment
     runs-on: ubuntu-latest
