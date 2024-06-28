@@ -99,6 +99,7 @@ jobs:
 
       - name: Deploy Python App
         run: |
+          echo "ip;" ${{ env.PUBLIC_IP }}
           scp -o StrictHostKeyChecking=no -i ~/.ssh/myvm hello_world.py ec2-user@${{ env.PUBLIC_IP }}:/home/ec2-user/
           ssh -o StrictHostKeyChecking=no -i ~/.ssh/myvm ec2-user@${{ env.PUBLIC_IP }} 'python3 /home/ec2-user/hello_world.py'
 
