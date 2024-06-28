@@ -79,14 +79,26 @@ jobs:
         env:
           INSTANCE_ID: ${{ steps.create_instance.outputs.instance_id }}
 
-      - name: Install Flask on EC2 instance
+  install-flask:
+    name: Install Flask on EC2 instance
+    runs-on: ubuntu-latest
+    needs: create-resources
+    steps:
+      - name: Set up SSH
         run: |
-          ssh -o StrictHostKeyChecking=no -i ~/.ssh/myvm.pem ec2-user@${{ needs.create-resources.outputs.public_ip }} 'python3 -m venv venv && source venv/bin/activate && pip install Flask'
+          mkdir -p ~/.ssh
+          echo "${{ secrets.adithi }}" > ~/.ssh/myvm
+          chmod 400 ~/.ssh/myvm
+
+      - name: Install Flask
+        run: |
+          ssh -o StrictHostKeyChecking=no -i ~/.ssh/myvm ubuntu@${{ needs.create-resources.outputs.public_ip }} 'sudo apt update && sudo apt install -y python3-venv python3-pip'
+          ssh -o StrictHostKeyChecking=no -i ~/.ssh/myvm ubuntu@${{ needs.create-resources.outputs.public_ip }} 'python3 -m venv venv && source venv/bin/activate && pip install Flask'
 
   deploy-app:
     name: Deploy Application
     runs-on: ubuntu-latest
-    needs: create-resources
+    needs: install-flask
     steps:
       - name: Checkout code
         uses: actions/checkout@v2
@@ -101,13 +113,13 @@ jobs:
       - name: Set up SSH
         run: |
           mkdir -p ~/.ssh
-          echo "${{ secrets.myvm_sshkey }}" > ~/.ssh/myvm
+          echo "${{ secrets.adithi }}" > ~/.ssh/myvm
           chmod 400 ~/.ssh/myvm
 
       - name: Deploy Python App
         run: |
-          scp -o StrictHostKeyChecking=no -i ~/.ssh/myvm hello_world.py ec2-user@${{ needs.create-resources.outputs.public_ip }}:/home/ec2-user/
-          ssh -o StrictHostKeyChecking=no -i ~/.ssh/myvm ec2-user@${{ needs.create-resources.outputs.public_ip }} 'python3 /home/ec2-user/hello_world.py'
+          scp -o StrictHostKeyChecking=no -i ~/.ssh/myvm hello_world.py ubuntu@${{ needs.create-resources.outputs.public_ip }}:/home/ubuntu/
+          ssh -o StrictHostKeyChecking=no -i ~/.ssh/myvm ubuntu@${{ needs.create-resources.outputs.public_ip }} 'python3 /home/ubuntu/hello_world.py'
 
   test-deployment:
     name: Test Deployment
@@ -116,4 +128,4 @@ jobs:
     steps:
       - name: Verify Deployment
         run: |
-          ssh -o StrictHostKeyChecking=no -i ~/.ssh/myvm ec2-user@${{ needs.create-resources.outputs.public_ip }} 'curl localhost:8000'
+          ssh -o StrictHostKeyChecking=no -i ~/.ssh/myvm ubuntu@${{ needs.create-resources.outputs.public_ip }} 'curl localhost:8000'
