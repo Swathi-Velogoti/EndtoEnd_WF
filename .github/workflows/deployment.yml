@@ -9,6 +9,7 @@ env:
   EC2_AMI_ID: ami-09040d770ffe2224f # Update with your preferred AMI ID
   EC2_KEY_NAME: adithi # Update with your key pair name
   S3_BUCKET_NAME: sucessbucket123  # Unique S3 bucket name
+  SECURITY_GROUP_NAME: adithi # Security group name
 
 jobs:
   create-resources:
@@ -25,7 +26,19 @@ jobs:
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: ${{ env.AWS_REGION }}
 
-      - name: Create S3 bucket
+      - name: Check if S3 bucket exists
+        id: check_s3
+        run: |
+          if aws s3api head-bucket --bucket ${{ env.S3_BUCKET_NAME }} 2>/dev/null; then
+            echo "S3 bucket exists"
+            echo "S3_BUCKET_EXISTS=true" >> $GITHUB_ENV
+          else
+            echo "S3 bucket does not exist"
+            echo "S3_BUCKET_EXISTS=false" >> $GITHUB_ENV
+          fi
+
+      - name: Create S3 bucket if not exists
+        if: env.S3_BUCKET_EXISTS == 'false'
         run: |
           aws s3 mb s3://${{ env.S3_BUCKET_NAME }} --region ${{ env.AWS_REGION }}
 
@@ -42,11 +55,17 @@ jobs:
             echo "INSTANCE_EXISTS=true" >> $GITHUB_ENV
           fi
 
+      - name: Get security group ID
+        id: get_sg_id
+        run: |
+          SECURITY_GROUP_ID=$(aws ec2 describe-security-groups --filters "Name=group-name,Values=${{ env.SECURITY_GROUP_NAME }}" --query "SecurityGroups[0].GroupId" --output text)
+          echo "SECURITY_GROUP_ID=$SECURITY_GROUP_ID" >> $GITHUB_ENV
+
       - name: Create EC2 instance if not exists
         if: env.INSTANCE_EXISTS == 'false'
         id: create_instance
         run: |
-          INSTANCE_ID=$(aws ec2 run-instances --image-id ${{ env.EC2_AMI_ID }} --count 1 --instance-type ${{ env.EC2_INSTANCE_TYPE }} --key-name ${{ env.EC2_KEY_NAME }} --tag-specifications 'ResourceType=instance,Tags=[{Key=Name,Value=myvm}]' --query 'Instances[0].InstanceId' --output text)
+          INSTANCE_ID=$(aws ec2 run-instances --image-id ${{ env.EC2_AMI_ID }} --count 1 --instance-type ${{ env.EC2_INSTANCE_TYPE }} --key-name ${{ env.EC2_KEY_NAME }} --security-group-ids ${{ env.SECURITY_GROUP_ID }} --tag-specifications 'ResourceType=instance,Tags=[{Key=Name,Value=myvm}]' --query 'Instances[0].InstanceId' --output text)
           echo "Created instance ID: $INSTANCE_ID"
           echo "INSTANCE_ID=$INSTANCE_ID" >> $GITHUB_ENV
 
@@ -60,6 +79,8 @@ jobs:
           PUBLIC_IP=$(aws ec2 describe-instances --instance-id ${{ env.INSTANCE_ID }} --query 'Reservations[0].Instances[0].PublicIpAddress' --output text)
           echo "Public IP: $PUBLIC_IP"
           echo "PUBLIC_IP=$PUBLIC_IP" >> $GITHUB_ENV
+        env:
+          INSTANCE_ID: ${{ steps.create_instance.outputs.INSTANCE_ID }}
 
   deploy-app:
     name: Deploy Application
