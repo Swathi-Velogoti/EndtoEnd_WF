@@ -87,13 +87,13 @@ jobs:
       - name: Set up SSH
         run: |
           mkdir -p ~/.ssh
-          echo "${{ secrets.adithi }}" > ~/.ssh/myvm
-          chmod 400 ~/.ssh/myvm
+          echo "${{ secrets.adithi }}" > ~/.ssh/myvm.pem
+          chmod 400 ~/.ssh/myvm.pem
 
       - name: Install Flask
         run: |
-          ssh -o StrictHostKeyChecking=no -i ~/.ssh/myvm ubuntu@${{ needs.create-resources.outputs.public_ip }} 'sudo apt update && sudo apt install -y python3-venv python3-pip'
-          ssh -o StrictHostKeyChecking=no -i ~/.ssh/myvm ubuntu@${{ needs.create-resources.outputs.public_ip }} 'python3 -m venv venv && source venv/bin/activate && pip install Flask'
+          ssh -v -o StrictHostKeyChecking=no -i ~/.ssh/myvm ubuntu@${{ needs.create-resources.outputs.public_ip }} 'sudo apt update && sudo apt install -y python3-venv python3-pip'
+          ssh -v -o StrictHostKeyChecking=no -i ~/.ssh/myvm ubuntu@${{ needs.create-resources.outputs.public_ip }} 'python3 -m venv venv && source venv/bin/activate && pip install Flask'
 
   deploy-app:
     name: Deploy Application
