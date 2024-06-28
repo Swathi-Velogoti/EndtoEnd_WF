@@ -103,8 +103,8 @@ jobs:
       - name: Deploy Python App
         run: |
           echo "Public IP is ${{ needs.create-resources.outputs.public_ip }}"
-          scp -o StrictHostKeyChecking=no -i ~/.ssh/myvm hello_world.py ec2-user@${{ needs.create-resources.outputs.public_ip }}:/home/ec2-user/
-          ssh -o StrictHostKeyChecking=no -i ~/.ssh/myvm ec2-user@${{ needs.create-resources.outputs.public_ip }} 'python3 /home/ec2-user/hello_world.py'
+          scp -o StrictHostKeyChecking=no -i ~/.ssh/myvm hello_world.py ubuntu@${{ needs.create-resources.outputs.public_ip }}:/home/ubuntu/
+          ssh -o StrictHostKeyChecking=no -i ~/.ssh/myvm ubuntu@${{ needs.create-resources.outputs.public_ip }} 'python3 /home/ubuntu/hello_world.py'
 
   test-deployment:
     name: Test Deployment
@@ -113,4 +113,4 @@ jobs:
     steps:
       - name: Verify Deployment
         run: |
-          ssh -o StrictHostKeyChecking=no -i ~/.ssh/myvm ec2-user@${{ needs.create-resources.outputs.public_ip }} 'curl localhost:8000'
+          ssh -o StrictHostKeyChecking=no -i ~/.ssh/myvm ubuntu@${{ needs.create-resources.outputs.public_ip }} 'curl localhost:8000'
