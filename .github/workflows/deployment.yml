@@ -87,13 +87,13 @@ jobs:
       - name: Set up SSH
         run: |
           mkdir -p ~/.ssh
-          echo "${{ secrets.adithi }}" > ~/.ssh/myvm.pem
+          echo "${{ secrets.MYVM_SSH_KEY }}" > ~/.ssh/myvm.pem
           chmod 600 ~/.ssh/myvm.pem
 
       - name: Install Flask
         run: |
-          ssh -v -o StrictHostKeyChecking=no -i ~/.ssh/myvm ubuntu@${{ needs.create-resources.outputs.public_ip }} 'sudo apt update && sudo apt install -y python3-venv python3-pip'
-          ssh -v -o StrictHostKeyChecking=no -i ~/.ssh/myvm ubuntu@${{ needs.create-resources.outputs.public_ip }} 'python3 -m venv venv && source venv/bin/activate && pip install Flask'
+          ssh -v -o StrictHostKeyChecking=no -i ~/.ssh/myvm.pem ubuntu@${{ needs.create-resources.outputs.public_ip }} 'sudo apt update && sudo apt install -y python3-venv python3-pip'
+          ssh -v -o StrictHostKeyChecking=no -i ~/.ssh/myvm.pem ubuntu@${{ needs.create-resources.outputs.public_ip }} 'python3 -m venv venv && source venv/bin/activate && pip install Flask'
 
   deploy-app:
     name: Deploy Application
@@ -113,13 +113,23 @@ jobs:
       - name: Set up SSH
         run: |
           mkdir -p ~/.ssh
-          echo "${{ secrets.adithi }}" > ~/.ssh/myvm
-          chmod 400 ~/.ssh/myvm
+          echo "${{ secrets.MYVM_SSH_KEY }}" > ~/.ssh/myvm.pem
+          chmod 600 ~/.ssh/myvm.pem
 
       - name: Deploy Python App
         run: |
-          scp -o StrictHostKeyChecking=no -i ~/.ssh/myvm.pem hello_world.py ubuntu@${{ needs.create-resources.outputs.get_ip.ip }}:/home/ubuntu/
-          ssh -o StrictHostKeyChecking=no -i ~/.ssh/myvm.pem ubuntu@${{ needs.create-resources.outputs.get_ip.ip }} 'nohup python3 /home/ubuntu/hello_world.py &'
+          scp -o StrictHostKeyChecking=no -i ~/.ssh/myvm.pem hello_world.py ubuntu@${{ needs.create-resources.outputs.public_ip }}:/home/ubuntu/
+          ssh -o StrictHostKeyChecking=no -i ~/.ssh/myvm.pem ubuntu@${{ needs.create-resources.outputs.public_ip }} 'nohup python3 /home/ubuntu/hello_world.py &'
+
+  test-deployment:
+    name: Test Deployment
+    runs-on: ubuntu-latest
+    needs: deploy-app
+    steps:
+      - name: Verify Deployment
+        run: |
+          curl http://${{ needs.create-resources.outputs.public_ip }}:8000
+
   test-deployment:
     name: Test Deployment
     runs-on: ubuntu-latest
