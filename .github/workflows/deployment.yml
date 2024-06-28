@@ -15,6 +15,9 @@ jobs:
   create-resources:
     name: Create AWS Resources
     runs-on: ubuntu-latest
+    outputs:
+      instance_id: ${{ steps.create_instance.outputs.instance_id }}
+      public_ip: ${{ steps.get_ip.outputs.public_ip }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v2
@@ -61,7 +64,7 @@ jobs:
         run: |
           INSTANCE_ID=$(aws ec2 run-instances --image-id ${{ env.EC2_AMI_ID }} --count 1 --instance-type ${{ env.EC2_INSTANCE_TYPE }} --key-name ${{ env.EC2_KEY_NAME }} --security-group-ids ${{ env.SECURITY_GROUP_ID }} --tag-specifications 'ResourceType=instance,Tags=[{Key=Name,Value=myvm}]' --query 'Instances[0].InstanceId' --output text)
           echo "Created instance ID: $INSTANCE_ID"
-          echo "INSTANCE_ID=$INSTANCE_ID" >> $GITHUB_ENV
+          echo "::set-output name=instance_id::${INSTANCE_ID}"
 
       - name: Wait for EC2 instance to be in running state
         run: |
@@ -72,9 +75,9 @@ jobs:
         run: |
           PUBLIC_IP=$(aws ec2 describe-instances --instance-id ${{ env.INSTANCE_ID }} --query 'Reservations[0].Instances[0].PublicIpAddress' --output text)
           echo "Public IP: $PUBLIC_IP"
-          echo "PUBLIC_IP=$PUBLIC_IP" >> $GITHUB_ENV
+          echo "::set-output name=public_ip::${PUBLIC_IP}"
         env:
-          INSTANCE_ID: ${{ steps.create_instance.outputs.INSTANCE_ID }}
+          INSTANCE_ID: ${{ steps.create_instance.outputs.instance_id }}
 
   deploy-app:
     name: Deploy Application
@@ -99,9 +102,9 @@ jobs:
 
       - name: Deploy Python App
         run: |
-          echo "ip;" ${{ env.PUBLIC_IP }}
-          scp -o StrictHostKeyChecking=no -i ~/.ssh/myvm hello_world.py ec2-user@${{ env.PUBLIC_IP }}:/home/ec2-user/
-          ssh -o StrictHostKeyChecking=no -i ~/.ssh/myvm ec2-user@${{ env.PUBLIC_IP }} 'python3 /home/ec2-user/hello_world.py'
+          echo "Public IP is ${{ needs.create-resources.outputs.public_ip }}"
+          scp -o StrictHostKeyChecking=no -i ~/.ssh/myvm hello_world.py ec2-user@${{ needs.create-resources.outputs.public_ip }}:/home/ec2-user/
+          ssh -o StrictHostKeyChecking=no -i ~/.ssh/myvm ec2-user@${{ needs.create-resources.outputs.public_ip }} 'python3 /home/ec2-user/hello_world.py'
 
   test-deployment:
     name: Test Deployment
@@ -110,4 +113,4 @@ jobs:
     steps:
       - name: Verify Deployment
         run: |
-          ssh -o StrictHostKeyChecking=no -i ~/.ssh/myvm ec2-user@${{ env.PUBLIC_IP }} 'curl localhost:8000'
+          ssh -o StrictHostKeyChecking=no -i ~/.ssh/myvm ec2-user@${{ needs.create-resources.outputs.public_ip }} 'curl localhost:8000'
