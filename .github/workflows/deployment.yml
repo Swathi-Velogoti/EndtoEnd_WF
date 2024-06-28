@@ -62,7 +62,8 @@ jobs:
         if: env.INSTANCE_EXISTS == 'false'
         id: create_instance
         run: |
-          INSTANCE_ID=$(aws ec2 run-instances --image-id ${{ env.EC2_AMI_ID }} --count 1 --instance-type ${{ env.EC2_INSTANCE_TYPE }} --key-name ${{ env.EC2_KEY_NAME }} --security-group-ids ${{ env.SECURITY_GROUP_ID }} --tag-specifications 'ResourceType=instance,Tags=[{Key=Name,Value=myvm}]' --query 'Instances[0].InstanceId' --output text)
+          USER_DATA=$(base64 -w 0 init-script.sh)
+          INSTANCE_ID=$(aws ec2 run-instances --image-id ${{ env.EC2_AMI_ID }} --count 1 --instance-type ${{ env.EC2_INSTANCE_TYPE }} --key-name ${{ env.EC2_KEY_NAME }} --security-group-ids ${{ env.SECURITY_GROUP_ID }} --user-data file://init-script.sh --tag-specifications 'ResourceType=instance,Tags=[{Key=Name,Value=myvm}]' --query 'Instances[0].InstanceId' --output text)
           echo "Created instance ID: $INSTANCE_ID"
           echo "::set-output name=instance_id::${INSTANCE_ID}"
 
@@ -79,26 +80,10 @@ jobs:
         env:
           INSTANCE_ID: ${{ steps.create_instance.outputs.instance_id }}
 
-  install-flask:
-    name: Install Flask on EC2 instance
-    runs-on: ubuntu-latest
-    needs: create-resources
-    steps:
-      - name: Set up SSH
-        run: |
-          mkdir -p ~/.ssh
-          echo "${{ secrets.MYVM_SSH_KEY }}" > ~/.ssh/myvm.pem
-          chmod 600 ~/.ssh/myvm.pem
-
-      - name: Install Flask
-        run: |
-          ssh -v -o StrictHostKeyChecking=no -i ~/.ssh/myvm.pem ubuntu@${{ needs.create-resources.outputs.public_ip }} 'sudo apt update && sudo apt install -y python3-venv python3-pip'
-          ssh -v -o StrictHostKeyChecking=no -i ~/.ssh/myvm.pem ubuntu@${{ needs.create-resources.outputs.public_ip }} 'python3 -m venv venv && source venv/bin/activate && pip install Flask'
-
   deploy-app:
     name: Deploy Application
     runs-on: ubuntu-latest
-    needs: install-flask
+    needs: create-resources
     steps:
       - name: Checkout code
         uses: actions/checkout@v2
@@ -114,7 +99,7 @@ jobs:
         run: |
           mkdir -p ~/.ssh
           echo "${{ secrets.MYVM_SSH_KEY }}" > ~/.ssh/myvm.pem
-          chmod 600 ~/.ssh/myvm.pem
+          chmod 400 ~/.ssh/myvm.pem
 
       - name: Deploy Python App
         run: |
