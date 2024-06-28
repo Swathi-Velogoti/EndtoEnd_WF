@@ -63,7 +63,7 @@ jobs:
         id: create_instance
         run: |
           USER_DATA=$(base64 -w 0 .github/workflows/init-script.sh)
-          INSTANCE_ID=$(aws ec2 run-instances --image-id ${{ env.EC2_AMI_ID }} --count 1 --instance-type ${{ env.EC2_INSTANCE_TYPE }} --key-name ${{ env.EC2_KEY_NAME }} --security-group-ids ${{ env.SECURITY_GROUP_ID }} --user-data file://init-script.sh --tag-specifications 'ResourceType=instance,Tags=[{Key=Name,Value=myvm}]' --query 'Instances[0].InstanceId' --output text)
+          INSTANCE_ID=$(aws ec2 run-instances --image-id ${{ env.EC2_AMI_ID }} --count 1 --instance-type ${{ env.EC2_INSTANCE_TYPE }} --key-name ${{ env.EC2_KEY_NAME }} --security-group-ids ${{ env.SECURITY_GROUP_ID }} --user-data "$USER_DATA"  --tag-specifications 'ResourceType=instance,Tags=[{Key=Name,Value=myvm}]' --query 'Instances[0].InstanceId' --output text)
           echo "Created instance ID: $INSTANCE_ID"
           echo "::set-output name=instance_id::${INSTANCE_ID}"
 
