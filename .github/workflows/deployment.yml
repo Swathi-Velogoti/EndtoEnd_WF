@@ -113,4 +113,6 @@ jobs:
     steps:
       - name: Verify Deployment
         run: |
-          curl http://${{ needs.create-resources.outputs.public_ip }}:8000
+          PUBLIC_IP="${{ needs.create-resources.outputs.public_ip }}"
+          echo "Testing deployment on IP: ${PUBLIC_IP}"
+          curl http://${PUBLIC_IP}:8000
